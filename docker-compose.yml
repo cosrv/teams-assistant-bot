@@ -1,3 +1,4 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
@@ -5,7 +6,7 @@ services:
     build: .
     container_name: teams-assistant-bot
     ports:
-      - "3978:3978"
+      - "127.0.0.1:3978:3978"  # NUR auf localhost binden!
     env_file:
       - .env
     restart: unless-stopped
