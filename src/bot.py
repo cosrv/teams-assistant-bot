@@ -2,8 +2,10 @@
 import asyncio
 import logging
 from botbuilder.core import TurnContext
+from botbuilder.core.integration import aiohttp_error_middleware
 from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
 from botbuilder.schema import Activity
+from botframework.connector.auth import AuthenticationConfiguration
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -22,13 +24,11 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI()
 
-# Create adapter with correct authentication
-auth_settings = {
-    "MicrosoftAppId": Config.APP_ID,
-    "MicrosoftAppPassword": Config.APP_PASSWORD
-}
-auth_config = ConfigurationBotFrameworkAuthentication(auth_settings)
-adapter = CloudAdapter(auth_config)
+# Create adapter - KORRIGIERTE VERSION
+adapter_settings = ConfigurationBotFrameworkAuthentication(
+    {"MicrosoftAppId": Config.APP_ID, "MicrosoftAppPassword": Config.APP_PASSWORD}
+)
+adapter = CloudAdapter(adapter_settings)
 
 # Error handler
 async def on_error(context: TurnContext, error: Exception):
@@ -51,27 +51,28 @@ except Exception as e:
 async def health_check():
     return JSONResponse({"status": "healthy", "service": "teams-assistant-bot"})
 
-# Bot messages endpoint
+# Bot messages endpoint - KORRIGIERTE VERSION
 @app.post("/api/messages")
 async def messages(request: Request):
     """Handle bot messages"""
-    # Get the raw body as JSON
+    if "application/json" not in request.headers.get("content-type", ""):
+        return JSONResponse({"error": "Invalid content type"}, status_code=415)
+    
     body = await request.json()
-    
-    if "type" not in body:
-        return JSONResponse({"error": "Invalid activity"}, status_code=400)
-    
     activity = Activity().deserialize(body)
     
-    async def aux_func(turn_context):
-        await bot.on_turn(turn_context)
+    # WICHTIG: auth_header aus Request extrahieren
+    auth_header = request.headers.get("Authorization", "")
     
     try:
-        # Process the activity
-        await adapter.process_activity(activity, "", aux_func)
+        # Korrigierter Aufruf mit auth_header statt string
+        async def call_bot(turn_context):
+            await bot.on_turn(turn_context)
+        
+        await adapter.process_activity(auth_header, activity, call_bot)
         return JSONResponse({"status": "ok"})
     except Exception as e:
-        logger.error(f"Error processing activity: {e}")
+        logger.error(f"Error processing activity: {str(e)}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # Main entry point
