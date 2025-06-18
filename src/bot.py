@@ -3,7 +3,7 @@ import asyncio
 import logging
 from aiohttp import web
 from botbuilder.core import TurnContext
-from botbuilder.core.integration import aiohttp_error_middleware
+from botframework.connector.auth import SimpleCredentialProvider
 from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
 from botbuilder.schema import Activity
 from fastapi import FastAPI

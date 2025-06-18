@@ -1,6 +1,7 @@
-botbuilder-core==4.14.3
-botbuilder-schema==4.14.3
-botbuilder-connector==4.14.3
+botbuilder-core==4.14.8
+botbuilder-schema==4.14.8
+botframework-connector==4.14.8
+botbuilder-integration-aiohttp==4.14.8
 aiohttp==3.9.1
 fastapi==0.109.0
 uvicorn==0.27.0
@@ -8,3 +9,4 @@ openai==1.12.0
 python-dotenv==1.0.0
 pydantic==2.5.3
 python-multipart==0.0.6
+requests==2.31.0
