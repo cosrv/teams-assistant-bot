@@ -2,9 +2,9 @@
 import asyncio
 import logging
 from botbuilder.core import TurnContext
-from botbuilder.integration.aiohttp import CloudAdapter
+from botbuilder.core.integration import BotFrameworkAdapter
 from botbuilder.schema import Activity
-from botframework.connector.auth import SimpleCredentialProvider, MicrosoftAppCredentials
+from botframework.connector.auth import MicrosoftAppCredentials
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -20,17 +20,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Debug output
+logger.info(f"=== BOT CONFIGURATION ===")
+logger.info(f"APP_ID: {Config.APP_ID}")
+logger.info(f"Password configured: {'YES' if Config.APP_PASSWORD else 'NO'}")
+logger.info(f"=======================")
+
 # Create FastAPI app
 app = FastAPI()
 
-# Create credentials and adapter - VEREINFACHTE VERSION
-credentials = SimpleCredentialProvider(
-    app_id=Config.APP_ID,
-    password=Config.APP_PASSWORD
-)
-
-# Create adapter with credentials
-adapter = CloudAdapter(credentials)
+# Create adapter - Using BotFrameworkAdapter instead of CloudAdapter
+adapter = BotFrameworkAdapter({
+    "app_id": Config.APP_ID,
+    "app_password": Config.APP_PASSWORD
+})
 
 # Error handler
 async def on_error(context: TurnContext, error: Exception):
@@ -43,7 +46,7 @@ adapter.on_turn_error = on_error
 try:
     assistant_manager = AssistantManager(Config.OPENAI_API_KEY, Config.ASSISTANT_ID)
     bot = TeamsAssistantBot(assistant_manager)
-    logger.info(f"Bot initialized with App ID: {Config.APP_ID[:8]}...")
+    logger.info("Bot successfully initialized")
 except Exception as e:
     logger.error(f"Failed to initialize bot: {e}")
     raise
@@ -64,25 +67,31 @@ async def messages(request: Request):
     if "application/json" not in request.headers.get("content-type", ""):
         return JSONResponse({"error": "Invalid content type"}, status_code=415)
     
-    body = await request.json()
-    activity = Activity().deserialize(body)
-    
-    # Get auth header
-    auth_header = request.headers.get("Authorization", "")
+    # Get body and headers
+    body = await request.body()
+    headers = dict(request.headers)
     
     try:
-        # Create response function
+        # Process activity with BotFrameworkAdapter
         async def call_bot(turn_context):
             await bot.on_turn(turn_context)
         
-        # Process activity
-        await adapter.process_activity(auth_header, activity, call_bot)
+        # Use process_activity with body and headers
+        response = await adapter.process_activity(
+            body.decode('utf-8'), 
+            headers, 
+            call_bot
+        )
+        
+        if response:
+            return JSONResponse(response.body, status_code=response.status)
         return JSONResponse({"status": "ok"})
+        
     except Exception as e:
         logger.error(f"Error processing activity: {str(e)}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# Handle OPTIONS requests for CORS
+# Handle OPTIONS requests
 @app.options("/api/messages")
 async def messages_options():
     return JSONResponse(
@@ -97,5 +106,4 @@ async def messages_options():
 # Main entry point
 if __name__ == "__main__":
     logger.info(f"Starting bot on port {Config.PORT}")
-    logger.info(f"App ID configured: {Config.APP_ID[:8]}...")
     uvicorn.run(app, host="0.0.0.0", port=Config.PORT)

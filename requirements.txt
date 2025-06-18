@@ -3,6 +3,7 @@ botbuilder-core==4.14.8
 botbuilder-schema==4.14.8
 botframework-connector==4.14.8
 botbuilder-integration-aiohttp==4.14.8
+botbuilder-adapters-slack==4.14.8  # Zusätzlich für BotFrameworkAdapter
 
 # Web Framework - WICHTIG: Version 3.8.5 für Kompatibilität!
 aiohttp==3.8.5
