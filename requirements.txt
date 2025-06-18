@@ -11,8 +11,11 @@ aiohttp==3.8.5
 fastapi==0.109.0
 uvicorn==0.27.0
 
-# OpenAI
-openai==1.12.0
+# OpenAI - Neuere Version für v2 API
+openai==1.35.0
+
+# HTTP Client für OpenAI
+httpx==0.25.2
 
 # Utilities
 python-dotenv==1.0.0

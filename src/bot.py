@@ -1,12 +1,10 @@
 # src/bot.py
 import asyncio
 import logging
-from aiohttp import web
 from botbuilder.core import TurnContext
-from botframework.connector.auth import SimpleCredentialProvider
 from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
 from botbuilder.schema import Activity
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -24,11 +22,12 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI()
 
-# Create adapter
-auth_config = ConfigurationBotFrameworkAuthentication(
-    app_id=Config.APP_ID,
-    app_password=Config.APP_PASSWORD
-)
+# Create adapter with correct authentication
+auth_settings = {
+    "MicrosoftAppId": Config.APP_ID,
+    "MicrosoftAppPassword": Config.APP_PASSWORD
+}
+auth_config = ConfigurationBotFrameworkAuthentication(auth_settings)
 adapter = CloudAdapter(auth_config)
 
 # Error handler
@@ -39,8 +38,13 @@ async def on_error(context: TurnContext, error: Exception):
 adapter.on_turn_error = on_error
 
 # Create bot
-assistant_manager = AssistantManager(Config.OPENAI_API_KEY, Config.ASSISTANT_ID)
-bot = TeamsAssistantBot(assistant_manager)
+try:
+    assistant_manager = AssistantManager(Config.OPENAI_API_KEY, Config.ASSISTANT_ID)
+    bot = TeamsAssistantBot(assistant_manager)
+    logger.info("Bot successfully initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize bot: {e}")
+    raise
 
 # Health check endpoint
 @app.get("/health")
@@ -49,17 +53,21 @@ async def health_check():
 
 # Bot messages endpoint
 @app.post("/api/messages")
-async def messages(req: dict):
+async def messages(request: Request):
     """Handle bot messages"""
-    if "type" not in req:
+    # Get the raw body as JSON
+    body = await request.json()
+    
+    if "type" not in body:
         return JSONResponse({"error": "Invalid activity"}, status_code=400)
     
-    activity = Activity().deserialize(req)
+    activity = Activity().deserialize(body)
     
     async def aux_func(turn_context):
         await bot.on_turn(turn_context)
     
     try:
+        # Process the activity
         await adapter.process_activity(activity, "", aux_func)
         return JSONResponse({"status": "ok"})
     except Exception as e:
