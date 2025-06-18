@@ -2,9 +2,8 @@
 import asyncio
 import logging
 from botbuilder.core import TurnContext
-from botbuilder.core.integration import BotFrameworkAdapter
+from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
 from botbuilder.schema import Activity
-from botframework.connector.auth import MicrosoftAppCredentials
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -29,15 +28,18 @@ logger.info(f"=======================")
 # Create FastAPI app
 app = FastAPI()
 
-# Create adapter - Using BotFrameworkAdapter instead of CloudAdapter
-adapter = BotFrameworkAdapter({
-    "app_id": Config.APP_ID,
-    "app_password": Config.APP_PASSWORD
+# Create adapter with proper configuration
+configuration = ConfigurationBotFrameworkAuthentication({
+    "MicrosoftAppId": Config.APP_ID,
+    "MicrosoftAppPassword": Config.APP_PASSWORD,
+    "MicrosoftAppType": "MultiTenant"  # Wichtig für Teams!
 })
+adapter = CloudAdapter(configuration)
 
 # Error handler
 async def on_error(context: TurnContext, error: Exception):
     logger.error(f"Error in bot: {error}")
+    logger.error(f"Error type: {type(error)}")
     await context.send_activity("Entschuldigung, es ist ein Fehler aufgetreten.")
 
 adapter.on_turn_error = on_error
@@ -57,7 +59,7 @@ async def health_check():
     return JSONResponse({
         "status": "healthy", 
         "service": "teams-assistant-bot",
-        "app_id_configured": bool(Config.APP_ID)
+        "app_id": Config.APP_ID[:8] + "..." if Config.APP_ID else "NOT SET"
     })
 
 # Bot messages endpoint
@@ -67,28 +69,26 @@ async def messages(request: Request):
     if "application/json" not in request.headers.get("content-type", ""):
         return JSONResponse({"error": "Invalid content type"}, status_code=415)
     
-    # Get body and headers
-    body = await request.body()
-    headers = dict(request.headers)
+    body = await request.json()
+    activity = Activity().deserialize(body)
+    
+    # Get auth header
+    auth_header = request.headers.get("Authorization", "")
+    
+    logger.info(f"Received activity type: {activity.type}")
+    logger.info(f"Auth header present: {'Yes' if auth_header else 'No'}")
     
     try:
-        # Process activity with BotFrameworkAdapter
+        # Process activity
         async def call_bot(turn_context):
             await bot.on_turn(turn_context)
         
-        # Use process_activity with body and headers
-        response = await adapter.process_activity(
-            body.decode('utf-8'), 
-            headers, 
-            call_bot
-        )
-        
-        if response:
-            return JSONResponse(response.body, status_code=response.status)
+        await adapter.process_activity(auth_header, activity, call_bot)
         return JSONResponse({"status": "ok"})
         
     except Exception as e:
         logger.error(f"Error processing activity: {str(e)}")
+        logger.error(f"Error details: {type(e).__name__}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # Handle OPTIONS requests
