@@ -16,3 +16,8 @@ class Config:
     # Server
     PORT = int(os.getenv("PORT", 3978))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Debug output
+print(f"Config loaded - APP_ID: {Config.APP_ID}")
+print(f"Config loaded - APP_ID present: {bool(Config.APP_ID)}")
+print(f"Config loaded - APP_PASSWORD present: {bool(Config.APP_PASSWORD)}")

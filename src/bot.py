@@ -2,10 +2,9 @@
 import asyncio
 import logging
 from botbuilder.core import TurnContext
-from botbuilder.core.integration import aiohttp_error_middleware
-from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
+from botbuilder.integration.aiohttp import CloudAdapter
 from botbuilder.schema import Activity
-from botframework.connector.auth import AuthenticationConfiguration
+from botframework.connector.auth import SimpleCredentialProvider, MicrosoftAppCredentials
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -24,15 +23,18 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI()
 
-# Create adapter - KORRIGIERTE VERSION
-adapter_settings = ConfigurationBotFrameworkAuthentication(
-    {"MicrosoftAppId": Config.APP_ID, "MicrosoftAppPassword": Config.APP_PASSWORD}
+# Create credentials and adapter - VEREINFACHTE VERSION
+credentials = SimpleCredentialProvider(
+    app_id=Config.APP_ID,
+    password=Config.APP_PASSWORD
 )
-adapter = CloudAdapter(adapter_settings)
+
+# Create adapter with credentials
+adapter = CloudAdapter(credentials)
 
 # Error handler
 async def on_error(context: TurnContext, error: Exception):
-    logger.error(f"Error: {error}")
+    logger.error(f"Error in bot: {error}")
     await context.send_activity("Entschuldigung, es ist ein Fehler aufgetreten.")
 
 adapter.on_turn_error = on_error
@@ -41,7 +43,7 @@ adapter.on_turn_error = on_error
 try:
     assistant_manager = AssistantManager(Config.OPENAI_API_KEY, Config.ASSISTANT_ID)
     bot = TeamsAssistantBot(assistant_manager)
-    logger.info("Bot successfully initialized")
+    logger.info(f"Bot initialized with App ID: {Config.APP_ID[:8]}...")
 except Exception as e:
     logger.error(f"Failed to initialize bot: {e}")
     raise
@@ -49,9 +51,13 @@ except Exception as e:
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return JSONResponse({"status": "healthy", "service": "teams-assistant-bot"})
+    return JSONResponse({
+        "status": "healthy", 
+        "service": "teams-assistant-bot",
+        "app_id_configured": bool(Config.APP_ID)
+    })
 
-# Bot messages endpoint - KORRIGIERTE VERSION
+# Bot messages endpoint
 @app.post("/api/messages")
 async def messages(request: Request):
     """Handle bot messages"""
@@ -61,21 +67,35 @@ async def messages(request: Request):
     body = await request.json()
     activity = Activity().deserialize(body)
     
-    # WICHTIG: auth_header aus Request extrahieren
+    # Get auth header
     auth_header = request.headers.get("Authorization", "")
     
     try:
-        # Korrigierter Aufruf mit auth_header statt string
+        # Create response function
         async def call_bot(turn_context):
             await bot.on_turn(turn_context)
         
+        # Process activity
         await adapter.process_activity(auth_header, activity, call_bot)
         return JSONResponse({"status": "ok"})
     except Exception as e:
         logger.error(f"Error processing activity: {str(e)}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# Handle OPTIONS requests for CORS
+@app.options("/api/messages")
+async def messages_options():
+    return JSONResponse(
+        {"status": "ok"},
+        headers={
+            "Allow": "POST, OPTIONS",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type"
+        }
+    )
+
 # Main entry point
 if __name__ == "__main__":
     logger.info(f"Starting bot on port {Config.PORT}")
+    logger.info(f"App ID configured: {Config.APP_ID[:8]}...")
     uvicorn.run(app, host="0.0.0.0", port=Config.PORT)
