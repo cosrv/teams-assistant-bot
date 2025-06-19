@@ -1,0 +1,62 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.16",
+    "version": "1.0.0",
+    "id": "cb86ae26-54e5-4368-8759-0e8ce43246f9",
+    "packageName": "de.ifp-service.hr-assistant",
+    "developer": {
+        "name": "IFP Labs GmbH",
+        "websiteUrl": "https://www.ifp-labs.com",
+        "privacyUrl": "https://www.ifp-labs.com/privacy",
+        "termsOfUseUrl": "https://www.ifp-labs.com/terms"
+    },
+    "name": {
+        "short": "HR Assistant",
+        "full": "HR Assistant - Ihr persönlicher Ansprechpartner"
+    },
+    "description": {
+        "short": "Ihr persönlicher HR-Assistent für alle Fragen",
+        "full": "Der HR Assistant ist Ihr persönlicher Ansprechpartner für alle Fragen rund um HR-Themen. Stellen Sie Ihre Fragen in einem privaten 1:1 Chat und erhalten Sie schnelle, hilfreiche Antworten."
+    },
+    "icons": {
+        "color": "color.png",
+        "outline": "outline.png"
+    },
+    "accentColor": "#0066CC",
+    "bots": [
+        {
+            "botId": "cb86ae26-54e5-4368-8759-0e8ce43246f9",
+            "scopes": [
+                "personal"
+            ],
+            "supportsFiles": false,
+            "isNotificationOnly": false,
+            "commandLists": [
+                {
+                    "scopes": ["personal"],
+                    "commands": [
+                        {
+                            "title": "Hilfe",
+                            "description": "Zeigt verfügbare Befehle und Informationen"
+                        },
+                        {
+                            "title": "Krankmeldung",
+                            "description": "Informationen zur Krankmeldung"
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "permissions": [
+        "identity",
+        "messageTeamMembers"
+    ],
+    "validDomains": [
+        "b1.ifp-service.de"
+    ],
+    "webApplicationInfo": {
+        "id": "cb86ae26-54e5-4368-8759-0e8ce43246f9",
+        "resource": "api://botid-cb86ae26-54e5-4368-8759-0e8ce43246f9"
+    }
+}

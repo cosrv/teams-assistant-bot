@@ -18,3 +18,16 @@ teams-assistant-bot/
 └── docs/
     ├── setup.md
     └── update_strategy.md
+
+
+
+# chmod +x scrtips/deploy.sh
+# ./scripts/deploy.sh
+
+
+zip -r ../teams-hr-assistant.zip manifest.json color.png outline.png -x "*.DS_Store" -x "__MACOSX/*"
+
+docker-compose up -d
+
+
+docker-compose down -v
