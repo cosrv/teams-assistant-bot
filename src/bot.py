@@ -2,7 +2,12 @@ import logging
 import sys
 import json
 import os
+import warnings
 from datetime import datetime
+from contextlib import asynccontextmanager
+
+# RuntimeWarnings für unser Workaround unterdrücken
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="src.teams_handler")
 
 # Logging Level aus Umgebungsvariable oder Standard INFO
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
@@ -48,7 +53,17 @@ logger.info(f"Log Level: {LOG_LEVEL}")
 logger.info(f"APP_ID configured: {'Yes' if Config.APP_ID else 'No'}")
 logger.info("="*50)
 
-app = FastAPI()
+# Lifespan Context Manager für FastAPI (ersetzt on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info(f"Bot API started on port {Config.PORT}")
+    logger.info("Ready to receive messages!")
+    yield
+    # Shutdown
+    logger.info("Bot shutting down...")
+
+app = FastAPI(lifespan=lifespan)
 
 # Bot Framework Adapter
 try:
@@ -175,12 +190,6 @@ async def messages_options():
             "Access-Control-Allow-Headers": "Authorization, Content-Type"
         }
     )
-
-# Startup event für einmalige Logs
-@app.on_event("startup")
-async def startup_event():
-    logger.info(f"Bot API started on port {Config.PORT}")
-    logger.info("Ready to receive messages!")
 
 if __name__ == "__main__":
     # Uvicorn mit reduziertem Logging

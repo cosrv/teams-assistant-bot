@@ -1,0 +1,15 @@
+# docker-compose.yml
+version: '3'
+
+services:
+  teams-bot:
+    build: .
+    container_name: teams-assistant-bot
+    ports:
+      - "127.0.0.1:3978:3978"
+    env_file:
+      - .env
+    environment:
+      - LOG_LEVEL=WARNING
+      - ALLOWED_TENANT_IDS=9982b4b3-05fe-470f-aea2-2d3aea3b61fa
+    restart: unless-stopped
