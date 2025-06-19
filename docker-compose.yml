@@ -9,4 +9,6 @@ services:
       - "127.0.0.1:3978:3978"
     env_file:
       - .env
+    environment:
+      - LOG_LEVEL=WARNING
     restart: unless-stopped

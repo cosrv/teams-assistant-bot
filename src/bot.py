@@ -82,23 +82,21 @@ except Exception as e:
 
 # Request Counter für Basic Monitoring
 request_count = 0
+message_count = 0
 
 @app.get("/health")
 async def health_check():
     return JSONResponse({
         "status": "healthy",
         "requests_processed": request_count,
+        "messages_processed": message_count,
         "log_level": LOG_LEVEL
     })
 
 @app.post("/api/messages")
 async def messages(request: Request):
-    global request_count
+    global request_count, message_count
     request_count += 1
-    
-    # Nur basis Info loggen
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug(f"Request #{request_count} from {request.client.host if request.client else 'unknown'}")
     
     try:
         # Headers
@@ -113,15 +111,16 @@ async def messages(request: Request):
         # Activity
         activity = Activity().deserialize(body_json)
         
-        # Nur wichtige Activity-Infos loggen
+        # Logging OHNE Nachrichteninhalt
         logger.info(f"Activity: type={activity.type}, "
-                   f"from={activity.from_property.name if activity.from_property else 'unknown'}, "
+                   f"from_id={activity.from_property.id if activity.from_property else 'unknown'}, "
                    f"channel={activity.channel_id}")
         
-        # Bei message activities den Text loggen (gekürzt)
-        if activity.type == "message" and activity.text:
-            text_preview = activity.text[:50] + "..." if len(activity.text) > 50 else activity.text
-            logger.info(f"Message: {text_preview}")
+        # Bei message activities nur zählen, nicht loggen
+        if activity.type == "message":
+            message_count += 1
+            logger.info(f"Processing message #{message_count}")
+            # KEIN Logging des Nachrichtentexts!
         
         # JWT Validierung
         credential_provider = SimpleCredentialProvider(Config.APP_ID, Config.APP_PASSWORD)
