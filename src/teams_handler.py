@@ -4,6 +4,7 @@ from botbuilder.schema import ChannelAccount, Activity, ActivityTypes
 import logging
 import asyncio
 import os
+import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,8 @@ class TeamsAssistantBot(ActivityHandler):
         
         # Sicherheitsprüfung: Tenant validieren (wenn konfiguriert)
         if self.allowed_tenants and not await self._validate_tenant(turn_context):
-            await turn_context.send_activity(
+            await self._send_activity_safe(
+                turn_context,
                 MessageFactory.text("Zugriff verweigert. Dieser Bot ist nur für autorisierte Organisationen verfügbar.")
             )
             logger.warning(f"Unauthorized access attempt from tenant: {self._get_tenant_id(turn_context)}")
@@ -49,21 +51,24 @@ class TeamsAssistantBot(ActivityHandler):
         
         if is_personal:
             try:
-                # Show typing indicator
-                typing_activity = MessageFactory.typing()
-                await self._safe_send_activity(turn_context, typing_activity)
+                # Show typing indicator - korrekte Methode
+                typing_activity = Activity(
+                    type=ActivityTypes.typing,
+                    relay_action=True
+                )
+                await self._send_activity_safe(turn_context, typing_activity)
                 
                 # Get response from assistant
                 response = await self.assistant_manager.get_response(user_id, message)
                 
                 # Send response
-                await self._safe_send_activity(turn_context, MessageFactory.text(response))
+                await self._send_activity_safe(turn_context, MessageFactory.text(response))
                 
                 logger.info(f"Response sent to user_id: {user_id}")
                 
             except Exception as e:
                 logger.error(f"Error in message handling: {e}", exc_info=True)
-                await self._safe_send_activity(
+                await self._send_activity_safe(
                     turn_context, 
                     MessageFactory.text("Entschuldigung, es ist ein Fehler aufgetreten. Bitte versuchen Sie es später erneut.")
                 )
@@ -84,7 +89,7 @@ class TeamsAssistantBot(ActivityHandler):
                         "Hallo! Ich bin Ihr persönlicher Assistent. "
                         "Schreiben Sie mir einfach eine direkte Nachricht, und ich helfe Ihnen gerne weiter."
                     )
-                    await self._safe_send_activity(turn_context, welcome_message)
+                    await self._send_activity_safe(turn_context, welcome_message)
                     logger.info("Welcome message sent")
                 except Exception as e:
                     logger.error(f"Error sending welcome message: {e}", exc_info=True)
@@ -125,20 +130,29 @@ class TeamsAssistantBot(ActivityHandler):
             
         return is_allowed
     
-    async def _safe_send_activity(self, turn_context: TurnContext, activity_or_text):
+    async def _send_activity_safe(self, turn_context: TurnContext, activity_or_text):
         """
-        Safely send an activity with proper error handling
+        Send activity with compatibility handling for different SDK versions
         """
         try:
-            # Versuche es mit await
-            result = await turn_context.send_activity(activity_or_text)
-            return result
-        except RuntimeWarning as w:
-            # Ignoriere RuntimeWarning für nicht-awaitable Objekte
-            if "was never awaited" in str(w):
-                logger.debug("Ignoring RuntimeWarning for send_activity")
-                return None
-            raise
-        except Exception as e:
-            logger.error(f"Error in send_activity: {e}")
-            raise
+            # Rufe send_activity auf
+            result = turn_context.send_activity(activity_or_text)
+            
+            # Prüfe ob das Ergebnis awaitable ist
+            if inspect.iscoroutine(result) or inspect.isawaitable(result):
+                return await result
+            else:
+                # Wenn nicht awaitable, ist es bereits fertig
+                return result
+                
+        except TypeError as e:
+            if "can't be used in 'await' expression" in str(e):
+                # Fallback: Versuche es ohne await
+                logger.debug("Using non-async send_activity")
+                try:
+                    return turn_context.send_activity(activity_or_text)
+                except Exception as inner_e:
+                    logger.error(f"Failed to send activity: {inner_e}")
+                    raise
+            else:
+                raise e
