@@ -139,7 +139,8 @@ teams-assistant-bot/
 │   └── outline.png         # App-Icon (Umriss)
 ├── scripts/                 # Deployment-Skripte
 │   ├── deploy.sh           # Deployment-Automatisierung
-│   └── health_check.sh     # Health-Monitoring
+│   ├── health_check.sh     # Health-Monitoring
+│   └── update_bot_ips_script.sh # Microsoft Bot Service IP-Updates
 ├── docker-compose.yml       # Docker-Orchestrierung
 ├── Dockerfile              # Container-Definition
 ├── requirements.txt        # Python-Abhängigkeiten
@@ -229,9 +230,170 @@ Automatisiertes Health-Monitoring:
 
 - **JWT-Token-Validierung**: Alle Teams-Anfragen werden authentifiziert
 - **Tenant-Filterung**: Optional Beschränkung auf spezifische Azure AD Tenants
+- **IP-Whitelist**: Nginx konfiguriert mit Microsoft Bot Service IP-Bereichen
+- **Automatische IP-Updates**: Wöchentliche Aktualisierung der Bot Service IPs
 - **Keine Nachrichtenprotokollierung**: Benutzerinhalte werden nicht geloggt (DSGVO-konform)
 - **Container-Sicherheit**: Läuft als non-root User
 - **HTTPS-Only**: Für Produktionsumgebungen empfohlen
+
+### Microsoft Bot Service IP-Whitelist
+
+Das Projekt enthält ein automatisiertes System zur Verwaltung der Microsoft Bot Service IP-Adressen in der Nginx-Konfiguration:
+
+#### Automatische IP-Updates mit `update-bot-ips.sh`
+
+Das Script `scripts/update-bot-ips.sh` lädt automatisch die aktuellen Microsoft Service Tags herunter und aktualisiert die Nginx-Konfiguration mit den neuesten Bot Service IP-Bereichen.
+
+**Funktionen:**
+- Lädt die aktuellen Microsoft Service Tags von der offiziellen Microsoft-URL
+- Extrahiert globale und europäische Bot Service IP-Bereiche
+- Erstellt automatisch Backups der bestehenden Nginx-Konfiguration
+- Validiert die neue Konfiguration vor der Anwendung
+- Führt automatisches Rollback bei Fehlern durch
+- Bereinigt alte Backup-Dateien automatisch
+
+#### Installation des IP-Update-Scripts
+
+**1. Script-Berechtigungen setzen:**
+
+```bash
+chmod +x scripts/update-bot-ips.sh
+```
+
+**2. Abhängigkeiten installieren:**
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install wget jq nginx
+
+# CentOS/RHEL
+sudo yum install wget jq nginx
+```
+
+**3. Nginx-Konfiguration vorbereiten:**
+
+Stellen Sie sicher, dass Ihre Nginx-Konfiguration (`/etc/nginx/sites-available/teams-bot`) den IP-Whitelist-Block enthält:
+
+```nginx
+# IP Whitelist für Microsoft Bot Service
+geo $bot_allowed {
+    default 0;
+    
+    # Lokaler Zugriff für Health Checks
+    127.0.0.1 1;
+    ::1 1;
+    
+    # Microsoft Bot Service IPs werden hier automatisch eingefügt
+}
+
+# HTTP Server
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    # Nur Bot Service IPs erlauben
+    if ($bot_allowed = 0) {
+        return 403;
+    }
+    
+    location /api/messages {
+        proxy_pass http://localhost:3978;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+**4. Erste manuelle Ausführung:**
+
+```bash
+sudo ./scripts/update-bot-ips.sh
+```
+
+#### Cronjob für automatische Updates einrichten
+
+**1. Cronjob als root erstellen:**
+
+```bash
+sudo crontab -e
+```
+
+**2. Wöchentlichen Cronjob hinzufügen:**
+
+```bash
+# Jeden Sonntag um 3:00 Uhr - Microsoft Bot Service IPs aktualisieren
+0 3 * * 0 /path/to/your/project/scripts/update-bot-ips.sh >> /var/log/nginx/bot-ip-cron.log 2>&1
+```
+
+**3. Alternativer monatlicher Cronjob:**
+
+```bash
+# Am ersten Tag des Monats um 3:00 Uhr
+0 3 1 * * /path/to/your/project/scripts/update-bot-ips.sh >> /var/log/nginx/bot-ip-cron.log 2>&1
+```
+
+**4. Cronjob-Status prüfen:**
+
+```bash
+# Aktive Cronjobs anzeigen
+sudo crontab -l
+
+# Log-Datei überwachen
+sudo tail -f /var/log/nginx/bot-ip-update.log
+```
+
+#### Script-Konfiguration anpassen
+
+Das Script kann durch Bearbeitung der Konfigurationsvariablen am Anfang der Datei angepasst werden:
+
+```bash
+# Pfad zur Nginx-Konfigurationsdatei
+NGINX_CONFIG="/etc/nginx/sites-available/teams-bot"
+
+# Backup-Verzeichnis
+BACKUP_DIR="/etc/nginx/config-backups"
+
+# Log-Datei
+LOG_FILE="/var/log/nginx/bot-ip-update.log"
+
+# URL für Microsoft Service Tags (wird regelmäßig aktualisiert)
+SERVICE_TAGS_URL="https://download.microsoft.com/download/7/1/D/71D86715-5596-4529-9B13-DA13A5DE5B63/ServiceTags_Public_20250616.json"
+```
+
+#### Monitoring und Troubleshooting
+
+**Log-Dateien überwachen:**
+
+```bash
+# Script-Logs anzeigen
+sudo tail -f /var/log/nginx/bot-ip-update.log
+
+# Nginx-Fehler-Logs
+sudo tail -f /var/log/nginx/error.log
+```
+
+**Manuelle Validierung:**
+
+```bash
+# Nginx-Konfiguration testen
+sudo nginx -t
+
+# Aktuelle IP-Anzahl prüfen
+grep -c "1;" /etc/nginx/sites-available/teams-bot
+```
+
+**Backup wiederherstellen:**
+
+```bash
+# Verfügbare Backups anzeigen
+ls -la /etc/nginx/config-backups/
+
+# Backup wiederherstellen
+sudo cp /etc/nginx/config-backups/teams-bot.YYYYMMDD_HHMMSS.backup /etc/nginx/sites-available/teams-bot
+sudo nginx -t && sudo systemctl reload nginx
+```
 
 ### Datenschutz-Hinweise
 
